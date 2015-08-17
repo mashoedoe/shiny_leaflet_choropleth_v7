@@ -36,7 +36,7 @@ ui <- navbarPage(
                    ),
         title = "Map",
         sidebarLayout(
-            position="left", fluid = TRUE,
+            position=c("left","right"), fluid = TRUE,
             sidebarPanel(
                 class="sidebar",
                 width=3,
@@ -75,6 +75,7 @@ ui <- navbarPage(
                     condition = "input.enable_hover == false",
                     DT::dataTableOutput(outputId = "table_subset",
                                         width = '340px')
+#                    style = "font-size:80%"
                 )
             ),
             mainPanel(
@@ -126,7 +127,7 @@ ui <- navbarPage(
 
 server <- function(session, input, output) {
     # save selected map objects and geographic names as reactive values 
-    gis <- reactiveValues(tj=town_tj) # chosen topojson object
+    gis <- reactiveValues(tj=NULL) # chosen topojson object
     gis <- reactiveValues(shp=NULL) # chosen spatial polygon dataframe object
     gis <- reactiveValues(single=NULL) # chosen spatial polygon dataframe object
     gis <- reactiveValues(id=NULL) # Name of Geographical feature being hovered over
@@ -137,7 +138,9 @@ server <- function(session, input, output) {
     gis <- reactiveValues(mouse_events=0) # 1 or 0 - proxy for presence of topojson layer
 #    gis <- reactiveValues(click=NULL) # 
      
-     observe(if (input$enable_hover == FALSE & (!is.null(input$map1_shape_click$id))){
+     observe(if (input$enable_hover == FALSE & 
+                 input$select_map_level == 'Ward'&
+                 (!is.null(input$map1_shape_click$id))){
          label = "event0"
          gis$click <- input$map1_shape_click$id
      })
@@ -150,12 +153,9 @@ server <- function(session, input, output) {
     })
     # Choose a topojson oject that matches the administative layer being viewed 
     # by the user
-    observe(if (input$select_map_level == 'Ward'){
+    observe(if (input$select_map_level == 'Ward' | 
+                input$select_map_level == 'Municipality'){
         label="event2a"
-        gis$tj <- town_tj
-    })
-    observe(if (input$select_map_level == 'Municipality'){
-        label="event2b"
         gis$tj <- town_tj
     })
     observe(if (input$select_map_level == 'Province'){
@@ -166,70 +166,54 @@ server <- function(session, input, output) {
     # layer being viewed by the user
     observe(if (input$enable_hover==TRUE &
                 input$select_map_level == 'Ward' &  
-                (!is.null(gis$mouseover_id))){ # | 
-#                (!is.null(input$map1_topojson_mouseover))){
+                (!is.null(input$map1_topojson_mouseover$properties$WARD))){ 
         label="event3a"
         gis$single <- subset(ward_tj_spd,
-                          subset = ward_tj_spd@data$WARD == gis$mouseover_id)
+                          subset = ward_tj_spd@data$WARD == input$map1_topojson_mouseover$properties$WARD)
+    })
+    observe(if (input$select_map_level == 'Municipality' &
+                (!is.null(input$map1_topojson_mouseover$properties$MUNICNAME))){
+        label="event3b"
+        gis$single <- subset(x = gis$shp,
+                             subset = gis$shp@data$MUNICNAME == input$map1_topojson_mouseover$properties$MUNICNAME)
+    })
+    observe(if (input$select_map_level == 'Province' &
+                (!is.null(input$map1_topojson_mouseover$properties$PROVINCE))){
+        label="event3c"
+        gis$single <- subset(x = gis$shp,
+                             subset = gis$shp@data$PROVINCE == input$map1_topojson_mouseover$properties$PROVINCE)
+    })
+    observe(if (input$enable_hover==FALSE &
+                input$select_map_level == 'Ward' &
+                (!is.null(input$map1_topojson_mouseover$properties$MUNICNAME))){
+        label="event3d"
+        gis$shp <- subset(ward_tj_spd,
+                          subset = ward_tj_spd@data$MUNICNAME == input$map1_topojson_mouseover$properties$MUNICNAME)
+    })
+    observe(if (input$enable_hover==FALSE &
+                input$select_map_level == 'Ward' &
+                (!is.null(input$map1_topojson_click$properties$MUNICNAME))){
+        label="event3e"
+        gis$shp <- subset(x = ward_tj_spd,
+                          subset = ward_tj_spd@data$MUNICNAME == input$map1_topojson_click$properties$MUNICNAME)
     })
 #     observe(if (input$enable_hover==FALSE &
 #                 input$select_map_level == 'Ward' &
-#                 (!is.null(input$map1_shape_click$id))){
-#         label="event3b"
-#         gis$single <- subset(ward_tj_spd,
-#                              subset = ward_tj_spd@data$ID == input$map1_shape_click$id)
+#                 (is.null(input$map1_topojson_mouseover$properties$MUNICNAME)) &
+#                 (is.null(input$map1_shape_mouseover$id)) &
+#                 (!is.null(input$map1_topojson_click$properties$MUNICNAME))){
+#         label="event3f"
+#         gis$shp <- subset(x = ward_tj_spd,
+#                           subset = ward_tj_spd@data$MUNICNAME == input$map1_topojson_click$properties$MUNICNAME)
 #     })
-    observe(if (input$enable_hover==FALSE &
-                input$select_map_level == 'Ward' &
-                is.null(gis$mouseover_id) & is.null(input$map1_topojson_mouseover)){
-        label="event3c"
-        gis$shp <- subset(ward_tj_spd,
-                          subset = ward_tj_spd@data$MUNICNAME == gis$slice2)
-    })
-    observe(if (input$enable_hover==FALSE &
-                input$select_map_level == 'Ward' &
-                ((!is.null(gis$mouseover_id)) | (!is.null(input$map1_topojson_mouseover)))){
-        label="event3d"
-        gis$shp <- subset(x = ward_tj_spd,
-                          subset = ward_tj_spd@data$MUNICNAME == gis$slice2)
-    })
-    
-    observe(if (input$select_map_level == 'Municipality'){# & input$enable_hover==FALSE){
-        label="event3e"
+    observe(if (input$select_map_level == 'Municipality'){
+        label="event3g"
         gis$shp <- town_tj_spd
     })
-    observe(if (input$select_map_level == 'Municipality' &
-#                input$enable_hover==TRUE & 
-                (gis$mouse_events == 1)){
-        label="event3f"
-        gis$single <- subset(x = town_tj_spd,
-                          subset = town_tj_spd@data$MUNICNAME == input$map1_topojson_mouseover$properties$MUNICNAME)
-    })
-#     observe(if (input$enable_hover==FALSE &
-#                 input$select_map_level == 'Municipality'){
-#         observeEvent(input$map1_shape_click,label="event3g", {
-#             gis$single <- subset(town_tj_spd,
-#                                  subset = town_tj_spd@data$ID == input$map1_shape_click$id)
-#         })
-#     })
     observe(if (input$select_map_level == 'Province'){#} & input$enable_hover==FALSE){
         label="event3h"
         gis$shp <- province_tj_spd
     })
-    observe(if (input$select_map_level == 'Province' &
-#                input$enable_hover==TRUE &
-                (gis$mouse_events == 1)){
-        label="event3i"
-        gis$single <- subset(x = province_tj_spd,
-                          subset = province_tj_spd@data$PROVINCE == input$map1_topojson_mouseover$properties$PROVINCE)
-    })
-#     observe(if (input$enable_hover==FALSE &
-#                 input$select_map_level == 'Province'){
-#         observeEvent(input$map1_shape_click, label="event3j", {
-#             gis$single <- subset(province_tj_spd,
-#                                  subset = province_tj_spd@data$ID == input$map1_shape_click$id)
-#         })
-#     })
 #    observe(if (!is.null(gis$shp)){
 #        gis$bbox_spd <- bbox(gis$shp)
 #    })
@@ -287,37 +271,35 @@ server <- function(session, input, output) {
 #    observeEvent(input$map1_shape_mouseover, label="event12c",{
 #        gis$slice1 <- gis$shp@data$PROVINCE[gis$shp@data$ID == gis$mouseover_id]
 #    })
-    observe(if(!is.null(gis$mouseover_id) & input$enable_hover == FALSE){ 
+    observe(if(!is.null(input$map1_shape_mouseover$id)) {
         label="event12d"
-        gis$slice1 <- gis$shp@data$PROVINCE[gis$shp@data$ID == gis$mouseover_id]
+        gis$slice1 <- gis$shp@data$PROVINCE[gis$shp@data$ID == input$map1_shape_mouseover$id]
     })
-    observeEvent(input$map1_topojson_click, label="event12e", {
+    observe(if(!is.null(input$map1_topojson_click$properties$PROVINCE)) {
+        label="event12e"
         gis$slice1 <- input$map1_topojson_click$properties$PROVINCE
     })
 #    observeEvent(input$map1_shape_mouseout, label="event12f",{
 #        gis$slice1 <- NULL
 #    })
     # identify the Municipality being moused over or clicked on
-    observeEvent(input$map1_topojson_mouseover, label="event13a",{
-            gis$slice2 <- input$map1_topojson_mouseover$properties$MUNICNAME
+    observe(if (!is.null(input$map1_topojson_mouseover$properties$MUNICNAME)) {
+        label="event13a"
+        gis$slice2 <- input$map1_topojson_mouseover$properties$MUNICNAME
     })
-     observe(if((!is.null(gis$mouseover_id) & input$select_map_level == 'Municipality')){ 
+    observe(if(!is.null(input$map1_shape_mouseover$id)) { 
          label="event13b"
-#         gis$slice2 <- town_tj_spd@data$MUNICNAME[town_tj_spd@data$ID == gis$mouseover_id]
-         gis$slice2 <- gis$shp@data$MUNICNAME[gis$shp@data$ID == gis$mouseover_id]
-         
+         gis$slice2 <- gis$shp@data$MUNICNAME[gis$shp@data$ID == input$map1_shape_mouseover$id]
      })
-#     observe(if((!is.null(input$map1_shape_click$id)) &
-#                (input$select_map_level == 'Municipality'|input$select_map_level == 'Ward')){
-#         label="event13c"
-     observeEvent(input$map1_shape_click, label="event13c", {
-         gis$slice2 <- gis$shp@data$MUNICNAME[gis$shp@data$ID == input$map1_shape_click$id]
-     })
-     observeEvent(input$map1_topojson_click, label="event13d", {
-#         observe(if( input$select_map_level == 'Ward'|input$select_map_level == 'Province'){
-             gis$slice2 <- input$map1_topojson_click$properties$MUNICNAME
-#         })
+    observe(if (!is.null(input$map1_shape_click$id)) {
+        label="event13c"
+        gis$slice2 <- gis$shp@data$MUNICNAME[gis$shp@data$ID == input$map1_shape_click$id]
     })
+    observe(if (!is.null(input$map1_topojson_click$properties$MUNICNAME)) {
+        label="event13d"
+        gis$slice2 <- input$map1_topojson_click$properties$MUNICNAME
+    })
+    
 #    observeEvent(input$map1_topojson_mouseout, label="event15",{
 #        gis$slice2 <- NULL
 #    })
@@ -472,6 +454,20 @@ server <- function(session, input, output) {
     # clearGroups is not required for specifying only some shapes
     # gis$tj stores the correct object based on the radio button status in the UI
     # so seperate proxies for Province, Municipality and Ward are not required.
+    observe(if (input$enable_hover == TRUE) { 
+        label = 'proxy_map_event'
+        proxy <- leafletProxy(
+            "map1"
+        )
+        proxy %>%
+            clearShapes() %>%
+            clearGroup('click') %>%
+            addTopoJSON(
+                topojson = gis$tj,
+                stroke=T,dashArray=3,weight=2,color="white",
+                opacity=1,fill=T,smoothFactor = 0.5
+            )
+    })
     observe(if (input$enable_hover == TRUE & 
                 input$select_map_level == 'Province'){
         label = 'proxy_map_event'
@@ -480,14 +476,9 @@ server <- function(session, input, output) {
         )
         proxy %>%
             clearShapes() %>%
-#            clearTopoJSON() %>%
-            clearGroup('town') %>%
+            clearTopoJSON() # %>%
+#            clearGroup('town') %>%
             #                clearGroup('gis_shp') %>%
-            addTopoJSON(
-                group = 'province', topojson = gis$tj,
-                stroke=T,dashArray=3,weight=2,color="white",
-                opacity=1,fill=T,smoothFactor = 0.5
-            )
     })
     observe(if (input$enable_hover == TRUE & 
                 input$select_map_level == 'Municipality'){
@@ -497,17 +488,10 @@ server <- function(session, input, output) {
         )
         proxy %>%
             clearShapes() %>%
-#            clearGroup('single') %>%
-#            clearTopoJSON() %>%
             clearGroup('province') %>%
-            clearGroup('town') %>%
-            clearGroup('ward') %>%
-            addTopoJSON(
-                group = 'town', topojson = gis$tj,
-                stroke=T,dashArray=3,weight=2,color="white",
-                opacity=1,fill=T,smoothFactor = 0.5
-            )
+            clearGroup('ward')
     })
+
     
     # when the user is at the ward level of detail, add the municipality's wards 
     # (as a Spatial Polygon Dataframe) on top of the municipal layer, tiling 
@@ -519,7 +503,7 @@ server <- function(session, input, output) {
                 "map1"
             )
             proxy %>%
-                clearGroup('single') %>%
+                clearShapes() %>%
                 clearGroup('ward') %>%
                 addTopoJSON(
                     group = 'ward',
@@ -532,6 +516,7 @@ server <- function(session, input, output) {
 #    })
     
     # add the outline of the single ward being hovered over 
+#    observeEvent(input$map1_topojson_mouseover,label="event22", {
     observe(if (gis$mouse_events == 1 & input$enable_hover == TRUE) {
         label="event22"
         proxy <- leafletProxy(
@@ -566,10 +551,7 @@ server <- function(session, input, output) {
         proxy %>%
             clearShapes() %>%
             clearTopoJSON() %>%
-#            clearGroup('gis_tj') %>%
-#            clearGroup('gis_shp') %>%
             addPolygons(
-#                group = 'gis_shp',
                 layerId = gis$shp@data$ID,
                 stroke=T,dashArray=3,weight=2,color="white",
                 opacity=1,fill=T,smoothFactor = 0.5, fillOpacity = 0.7,
@@ -591,10 +573,7 @@ server <- function(session, input, output) {
         proxy %>%
             clearShapes() %>%
             clearTopoJSON() %>%
-#            clearGroup('gis_tj') %>%
-#            clearGroup('gis_shp') %>%
             addPolygons(
-#                group = 'gis_shp',
                 layerId = gis$shp@data$ID,
                 stroke=T,dashArray=3,weight=2,color="white",
                 opacity=1,fill=T,smoothFactor = 0.5, fillOpacity = 0.7,
@@ -616,10 +595,8 @@ server <- function(session, input, output) {
         proxy %>%
             clearShapes() %>%
             clearTopoJSON() %>%
-#            clearGroup('gis_tj') %>%
-#            clearGroup('gis_shp') %>%
             addTopoJSON(
-#               group = 'gis_tj',
+                group = 'click',
                 stroke=T,dashArray=3,weight=2,color="white", topojson = gis$tj,
                 opacity=1,fill=T,smoothFactor = 0.5
             )
@@ -632,9 +609,7 @@ server <- function(session, input, output) {
         )
         proxy %>%
             clearShapes() %>%
-#            clearGroup('gis_shp') %>%
             addPolygons(
-#                group='gis_shp',
                 layerId = gis$shp@data$ID,
                 stroke=T,dashArray=3,weight=2,color="white",
                 opacity=1,fill=T,smoothFactor = 0.5, fillOpacity = 0.5,
@@ -669,7 +644,7 @@ server <- function(session, input, output) {
                             x=gis$single@data$MUNICNAME)),
                     br(),
                     "Ward",
-                    gis$shp@data$WARDNO,
+                    gis$single@data$WARDNO,
                     br(),
                     span(round(gis$single@data$DENSITY,1), HTML("people/km<sup>2</sup>"))
                 )
@@ -698,50 +673,58 @@ server <- function(session, input, output) {
     })
     observe(if (input$select_map_level == 'Ward' & (!is.null(gis$click))){
         output$table_subset <- DT::renderDataTable(
-            expr = gis$shp@data[gis$shp@data$ID == input$map1_shape_click$id,c(4,5,12)] %>%
-                mutate(
-                    Municipality=sub(
-                        pattern=" Local Municipality| Metropolitan Municipality|Local Municipality of ",
-                        replacement="",
-                        x=MUNICNAME
-                    ),
-                    Density = round(DENSITY,1)
-                ) %>%
-                rename(Ward=WARDNO) %>%
-                select(Municipality,Ward,Density),
-            options = list(
-                dom = "t",
-                pageLength=-1
-            )
+            datatable(
+                ward_tj_properties[ward_tj_properties$ID == input$map1_shape_click$id,c(4,5,12)] %>%
+                    mutate(
+                        Municipality=sub(
+                            pattern=" Local Municipality| Metropolitan Municipality|Local Municipality of ",
+                            replacement="",
+                            x=MUNICNAME
+                        ),
+                        Density = round(DENSITY,1)
+                    ) %>%
+                    rename(Ward=WARDNO) %>%
+                    select(Municipality,Ward,Density),
+                options = list(
+                    dom = "t",
+                    pageLength=-1
+                ),
+                rownames = FALSE
+            ) %>%
+                formatStyle(columns = c('Municipality','Ward','Density'), `font-size` = '90%')
         )
     })
     observe(if (input$select_map_level == 'Municipality'){# & (!is.null(gis$click))){
         output$table_subset <- DT::renderDataTable(
-            extensions = 'Scroller',
-            expr = ward_tj_properties[ward_tj_properties$MUNICNAME == gis$shp@data$MUNICNAME[gis$shp@data$ID == input$map1_shape_click$id],] %>%
-                mutate(
-                    Municipality=sub(
-                        pattern=" Local Municipality| Metropolitan Municipality|Local Municipality of ",
-                        replacement="",
-                        x=MUNICNAME
-                    ),
-                    Density = round(DENSITY,1)
-                ) %>%
-                rename(Ward=WARDNO) %>%
-                select(Municipality,Ward,Density),
-            options = list(
-                deferRender = TRUE,
-                dom = "ti",
-                scrollY = 400,
-                scrollCollapse = TRUE,
-                pageLength=-1
-            )
+            datatable(
+                ward_tj_properties[ward_tj_properties$MUNICNAME == gis$shp@data$MUNICNAME[gis$shp@data$ID == input$map1_shape_click$id],] %>%
+                    mutate(
+                        Municipality=sub(
+                            pattern=" Local Municipality| Metropolitan Municipality|Local Municipality of ",
+                            replacement="",
+                            x=MUNICNAME
+                        ),
+                        Density = round(DENSITY,1)
+                    ) %>%
+                    rename(Ward=WARDNO) %>%
+                    select(Municipality,Ward,Density),
+                extensions = 'Scroller',
+                options = list(
+                    deferRender = TRUE,
+                    dom = "ti",
+                    scrollY = 400,
+                    scrollCollapse = TRUE,
+                    pageLength=-1
+                ),
+                rownames = FALSE
+            ) %>%
+                formatStyle(columns = c('Municipality','Ward','Density'), `font-size` = '90%')
         )
     })
     observe(if (input$select_map_level == 'Province'){#& (!is.null(gis$click))){
         output$table_subset <- DT::renderDataTable(
-            extensions = 'Scroller',
-            expr = town_tj_properties[town_tj_properties$PROVINCE == gis$shp@data$PROVINCE[gis$shp@data$ID == input$map1_shape_click$id],] %>%
+            datatable(
+                town_tj_properties[town_tj_properties$PROVINCE == gis$shp@data$PROVINCE[gis$shp@data$ID == input$map1_shape_click$id],] %>%
                 mutate(
                     Municipality=sub(
                         pattern=" Local Municipality| Metropolitan Municipality|Local Municipality of ",
@@ -751,34 +734,19 @@ server <- function(session, input, output) {
                     Density = round(DENSITY,1)
                 ) %>%
                 select(Municipality,Density),
-            options = list(
-                deferRender = TRUE,
-                dom = "ti",
-                scrollY = 400,
-                scrollCollapse = TRUE,
-                pageLength=-1
-            )
+                extensions = 'Scroller',
+                options = list(
+                    deferRender = TRUE,
+                    dom = "ti",
+                    scrollY = 400,
+                    scrollCollapse = TRUE,
+                    pageLength=-1
+                ),
+                rownames = FALSE
+            ) %>%
+                formatStyle(columns = c('Municipality','Density'), `font-size` = '90%')
         )
     })
-    
-#     observe(if (input$select_map_level == 'Ward'){
-#         output$table_subset <- DT::renderDataTable(
-#             expr = t(gis$shp@data), server=T,
-#             options = list(pageLength = 15, dom = 'tip')
-#         )
-#     })
-#     observe(if (input$select_map_level == 'Municipality'){
-#         output$table_subset <- DT::renderDataTable(
-#             expr = t(gis$shp@data[gis$shp@data$MUNICNAME == gis$id,]),#server=T
-#             options = list(pageLength = 15, dom = 'tip')
-#         )
-#     })
-#     observe(if (input$select_map_level == 'Province'){
-#         output$table_subset <- DT::renderDataTable(
-#             expr = t(gis$shp@data[gis$shp@data$PROVINCE == gis$id,]), #server=T
-#             options = list(pageLength = 15, dom = 'tip')
-#         )
-#     })
     
     #the tables for the second tabPanel (which is a navbarMenu) 
     output$table_ward <- DT::renderDataTable(
